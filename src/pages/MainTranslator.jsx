@@ -133,11 +133,12 @@ const MainTranslator = () => {
   const executeEnhancement = async (rawText) => {
     setEnhancing(true);
     try {
+      const customKey = localStorage.getItem('sb_gemini_api_key');
       const { data, error } = await supabase.functions.invoke('gemini', {
         body: { text: rawText },
-        headers: {
-          'x-gemini-api-key': import.meta.env.VITE_GEMINI_API_KEY || ''
-        }
+        headers: customKey ? {
+          'x-gemini-api-key': customKey
+        } : {}
       });
       if (error) throw error;
       if (data && data.enhancedText) {
@@ -205,11 +206,12 @@ const MainTranslator = () => {
 
     // 2. Call Supabase edge function
     try {
+      const customKey = localStorage.getItem('sb_gemini_api_key');
       const { data, error } = await supabase.functions.invoke('translate', {
         body: { text: textToTranslate, sourceLang, targetLang },
-        headers: {
-          'x-gemini-api-key': import.meta.env.VITE_GEMINI_API_KEY || ''
-        }
+        headers: customKey ? {
+          'x-gemini-api-key': customKey
+        } : {}
       });
 
       if (error) throw error;

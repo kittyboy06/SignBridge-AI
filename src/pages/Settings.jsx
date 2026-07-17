@@ -7,6 +7,18 @@ const Settings = () => {
   const { user, logOut, isGuest } = useAuth();
   const navigate = useNavigate();
 
+  const [geminiKey, setGeminiKey] = React.useState(localStorage.getItem('sb_gemini_api_key') || '');
+
+  const handleKeyChange = (e) => {
+    const val = e.target.value;
+    setGeminiKey(val);
+    if (val.trim()) {
+      localStorage.setItem('sb_gemini_api_key', val.trim());
+    } else {
+      localStorage.removeItem('sb_gemini_api_key');
+    }
+  };
+
   const handleResetData = () => {
     if (window.confirm('This will reset all local preferences and log out. Continue?')) {
       localStorage.clear();
@@ -72,6 +84,28 @@ const Settings = () => {
             </div>
             <ChevronRight size={18} className="row-arrow" />
           </Link>
+        </div>
+
+        {/* Developer configuration settings */}
+        <div className="settings-card-group">
+          <h3>Developer Configuration</h3>
+          
+          <div className="settings-row-static-input">
+            <div className="row-item-left">
+              <span className="row-icon-box"><Shield size={20} /></span>
+              <div className="row-text-box">
+                <h4>Custom Gemini API Key</h4>
+                <p>Override cloud configuration dynamically</p>
+              </div>
+            </div>
+            <input
+              type="password"
+              placeholder="AIzaSy... (local storage)"
+              value={geminiKey}
+              onChange={handleKeyChange}
+              className="settings-text-input"
+            />
+          </div>
         </div>
 
         {/* System Administration Settings */}
@@ -217,6 +251,43 @@ const Settings = () => {
         }
         .sign-out-btn-row:hover {
           background-color: var(--color-danger-bg);
+        }
+
+        .settings-row-static-input {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 20px;
+          width: 100%;
+          border: none;
+          background: none;
+          text-align: left;
+          border-bottom: 1px solid var(--border-color);
+        }
+        .settings-text-input {
+          background-color: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          padding: 8px 12px;
+          border-radius: var(--border-radius-sm);
+          font-size: var(--font-size-sm);
+          color: var(--text-primary);
+          outline: none;
+          width: 220px;
+          transition: border-color var(--transition-fast);
+        }
+        .settings-text-input:focus {
+          border-color: var(--primary-color);
+        }
+
+        @media (max-width: 600px) {
+          .settings-row-static-input {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+          }
+          .settings-text-input {
+            width: 100%;
+          }
         }
       `}</style>
     </div>
