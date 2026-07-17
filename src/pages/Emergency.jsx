@@ -18,7 +18,9 @@ const Emergency = () => {
     console.log(`Triggering pre-cached audio for phrase: ${id}`);
     
     // Play local audio files from public/audio/emergency/
-    const audioPath = `/audio/emergency/${id}_ta.mp3`;
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const audioDir = baseUrl.endsWith('/') ? `${baseUrl}audio/emergency/` : `${baseUrl}/audio/emergency/`;
+    const audioPath = `${audioDir}${id}_ta.mp3`;
     const audio = new Audio(audioPath);
     
     audio.play().catch(err => {

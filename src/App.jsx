@@ -53,7 +53,7 @@ const AppRoutes = () => {
     );
   }
 
-  const isOnboarded = localStorage.getItem('sb_onboarded') === 'true';
+  const getIsOnboarded = () => localStorage.getItem('sb_onboarded') === 'true';
 
   return (
     <Routes>
@@ -68,11 +68,11 @@ const AppRoutes = () => {
       />
       <Route 
         path="/login" 
-        element={user ? <Navigate to="/" replace /> : (isOnboarded ? <Login /> : <Navigate to="/onboarding" replace />)} 
+        element={user ? <Navigate to="/" replace /> : (getIsOnboarded() ? <Login /> : <Navigate to="/onboarding" replace />)} 
       />
       <Route 
         path="/signup" 
-        element={user ? <Navigate to="/" replace /> : (isOnboarded ? <Signup /> : <Navigate to="/onboarding" replace />)} 
+        element={user ? <Navigate to="/" replace /> : (getIsOnboarded() ? <Signup /> : <Navigate to="/onboarding" replace />)} 
       />
 
       {/* Protected Pages (require login or guest session) */}
@@ -84,7 +84,7 @@ const AppRoutes = () => {
               <MainTranslator />
             </ShellLayout>
           ) : (
-            <Navigate to={isOnboarded ? "/login" : "/onboarding"} replace />
+            <Navigate to={getIsOnboarded() ? "/login" : "/onboarding"} replace />
           )
         }
       />

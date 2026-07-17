@@ -83,7 +83,9 @@ const CameraTranslator = ({
         // 2. Load TF.js Classifier Model
         console.log('Loading TF.js Classifier Model...');
         // We load the model.json from the public directory
-        const model = await tf.loadLayersModel('/model/model.json');
+        const baseUrl = import.meta.env.BASE_URL || '/';
+        const modelUrl = baseUrl.endsWith('/') ? `${baseUrl}model/model.json` : `${baseUrl}/model/model.json`;
+        const model = await tf.loadLayersModel(modelUrl);
         
         if (active) {
           classifierRef.current = model;
