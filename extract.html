@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SignBridge AI - Landmark Extractor</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      padding: 20px;
+      margin: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #1e1e1e;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    h1 {
+      color: #3b82f6;
+      margin-top: 0;
+    }
+    .progress-bar-container {
+      background: #333;
+      height: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+    .progress-bar {
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      height: 100%;
+      width: 0%;
+      transition: width 0.1s;
+    }
+    .status {
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #272727;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-val {
+      font-size: 24px;
+      font-weight: bold;
+      color: #60a5fa;
+    }
+    .log-area {
+      background: #000;
+      font-family: monospace;
+      padding: 15px;
+      border-radius: 6px;
+      height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-size: 12px;
+      color: #10b981;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SignBridge AI - Landmark Extractor</h1>
+    <p>Extracting scale and translation invariant normalized landmarks from dataset images in the browser.</p>
+    
+    <div class="stats">
+      <div class="stat-card">
+        <div>Processed</div>
+        <div id="processed-val" class="stat-val">0 / 0</div>
+      </div>
+      <div class="stat-card">
+        <div>Success Count</div>
+        <div id="success-val" class="stat-val">0</div>
+      </div>
+      <div class="stat-card">
+        <div>Active Class</div>
+        <div id="class-val" class="stat-val">-</div>
+      </div>
+    </div>
+
+    <div class="progress-bar-container">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+    
+    <div id="status-text" class="status">Initializing MediaPipe HandLandmarker...</div>
+    
+    <div id="log" class="log-area">Loading HandLandmarker model...</div>
+  </div>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script type="module">
+    import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
+
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status-text');
+    const progressBar = document.getElementById('progress-bar');
+    const processedVal = document.getElementById('processed-val');
+    const successVal = document.getElementById('success-val');
+    const classVal = document.getElementById('class-val');
+
+    function log(msg) {
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    function normalizeHandLandmarks(landmarks) {
+      // 1. Translate relative to wrist (landmark 0)
+      const wrist = landmarks[0];
+      const translated = landmarks.map(lm => ({
+        x: lm.x - wrist.x,
+        y: lm.y - wrist.y,
+        z: lm.z - wrist.z
+      }));
+
+      // 2. Scale relative to distance between Wrist (0) and Middle Knuckle (9)
+      const dx = translated[9].x - translated[0].x;
+      const dy = translated[9].y - translated[0].y;
+      const dz = translated[9].z - translated[0].z;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+      if (dist > 0) {
+        return translated.map(lm => ({
+          x: lm.x / dist,
+          y: lm.y / dist,
+          z: lm.z / dist
+        }));
+      }
+      return translated;
+    }
+
+    async function start() {
+      try {
+        log("Loading vision tasks resolver...");
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
+        );
+        
+        log("Initializing HandLandmarker...");
+        const handLandmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU"
+          },
+          runningMode: "IMAGE",
+          numHands: 2
+        });
+        
+        log("HandLandmarker successfully loaded!");
+        statusEl.textContent = "Loading image list...";
+        
+        const response = await fetch('/image_list.json');
+        const imageList = await response.json();
+        
+        log(`Loaded image list with ${imageList.length} entries.`);
+        statusEl.textContent = "Extracting landmarks...";
+        
+        const csvRows = [];
+        // Add header
+        const header = ["target", "uses_two_hands"];
+        for (let i = 0; i < 21; i++) {
+          header.push(`left_hand_x_${i}`, `left_hand_y_${i}`, `left_hand_z_${i}`);
+        }
+        for (let i = 0; i < 21; i++) {
+          header.push(`right_hand_x_${i}`, `right_hand_y_${i}`, `right_hand_z_${i}`);
+        }
+        csvRows.push(header.join(','));
+        
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let successCount = 0;
+        const total = imageList.length;
+        
+        // Loop images in chunks to avoid UI lock and keep memory low
+        const batchSize = 35;
+        for (let idx = 0; idx < total; idx += batchSize) {
+          const chunk = imageList.slice(idx, idx + batchSize);
+          
+          await Promise.all(chunk.map(async (entry) => {
+            return new Promise((resolve) => {
+              const img = new Image();
+              // Vite dev server serves files from local workspace under /@fs/
+              img.src = `/@fs/${entry.path}`;
+              img.crossOrigin = "anonymous";
+              
+              img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                const results = handLandmarker.detect(canvas);
+                
+                if (results && results.landmarks && results.landmarks.length > 0) {
+                  const usesTwoHands = results.landmarks.length > 1 ? 1.0 : 0.0;
+                  let leftHandCoords = new Array(63).fill(-1.0);
+                  let rightHandCoords = new Array(63).fill(-1.0);
+                  
+                  results.landmarks.forEach((handLandmarks, hIdx) => {
+                    const handedness = results.handednesses[hIdx][0].categoryName; // "Left" or "Right"
+                    const normalized = normalizeHandLandmarks(handLandmarks);
+                    
+                    const coordsFlat = [];
+                    normalized.forEach(lm => {
+                      coordsFlat.push(lm.x, lm.y, lm.z);
+                    });
+                    
+                    if (handedness === 'Left') {
+                      leftHandCoords = coordsFlat;
+                    } else {
+                      rightHandCoords = coordsFlat;
+                    }
+                  });
+                  
+                  const row = [entry.label, usesTwoHands, ...leftHandCoords, ...rightHandCoords];
+                  csvRows.push(row.join(','));
+                  successCount++;
+                }
+                resolve();
+              };
+              
+              img.onerror = () => {
+                resolve();
+              };
+            });
+          }));
+          
+          // Update UI
+          const processed = Math.min(idx + batchSize, total);
+          const percent = (processed / total) * 100;
+          progressBar.style.width = `${percent}%`;
+          processedVal.textContent = `${processed} / ${total}`;
+          successVal.textContent = successCount;
+          classVal.textContent = chunk[chunk.length - 1].char.toUpperCase();
+          
+          if (idx % 100 === 0) {
+            log(`Processed ${processed}/${total} images. Success count: ${successCount}`);
+          }
+        }
+        
+        statusEl.textContent = "Extraction complete! Uploading data to save server...";
+        log("Compiling CSV string...");
+        const csvString = csvRows.join('\n');
+        
+        log("Uploading data to http://localhost:3001/save...");
+        const uploadRes = await fetch('http://localhost:3001/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/csv'
+          },
+          body: csvString
+        });
+        
+        const uploadJson = await uploadRes.json();
+        if (uploadJson.status === 'success') {
+          statusEl.textContent = "Extracting complete & successfully saved CSV!";
+          log("CSV successfully saved! You can close this window now.");
+        } else {
+          statusEl.textContent = "Save failed!";
+          log(`Error: ${uploadJson.message}`);
+        }
+        
+      } catch (err) {
+        log(`Error: ${err.message}`);
+        statusEl.textContent = "Error occurred!";
+        console.error(err);
+      }
+    }
+
+    // Run extractor when DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+      // Start after short delay
+      setTimeout(start, 1000);
+    });
+  </script>
+</body>
+</html>
